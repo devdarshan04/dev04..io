@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StudyBuddy 3D — Upload. Understand. Practice. Remember.</title>
+  <meta name="description" content="StudyBuddy 3D turns your PDF notes into an AI study assistant, exam practice and spaced-repetition flashcards.">
+  <meta name="theme-color" content="#050b1f">
+  <!-- Address of your StudyBuddy backend. Leave empty when the Express server serves this page itself.
+       For GitHub Pages, set it to your deployed backend, e.g. https://studybuddy-api.onrender.com -->
+  <meta name="studybuddy-api" content="">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600&family=Sora:wght@500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- PDF.js (classic build). If this fails to load the app shows a visible message on upload. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <!-- The app logic (a normal script, so it also works when index.html is opened from a folder). Three.js is imported dynamically inside script.js so a CDN failure only disables the 3D background. -->
+  <script src="script.js" defer></script>
+</head>
+<body class="is-login">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- 3D background (Three.js) + CSS fallback when WebGL is unavailable -->
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <div id="bg-fallback" class="bg-fallback" aria-hidden="true" hidden></div>
+
+  <!-- Toast messages -->
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+
+  <!-- Shown only if script.js never starts (it removes itself from the page when the app boots). -->
+  <div id="load-fail" class="load-fail" role="alert">
+    <strong>StudyBuddy did not start.</strong>
+    Press <b>Ctrl+F5</b> to reload. Make sure <code>script.js</code> and <code>style.css</code> are in the same folder as <code>index.html</code>
+    and that the site is opened from its GitHub Pages address (https://…github.io/…) or <code>http://localhost:3000</code>.
+  </div>
+
+  <noscript>
+    <div class="noscript">StudyBuddy 3D needs JavaScript. Please enable it and reload the page.</div>
+  </noscript>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="login-screen" class="login">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="brand">
+        <span class="cube" aria-hidden="true">
+          <span class="cube-face f1"></span><span class="cube-face f2"></span><span class="cube-face f3"></span>
+          <span class="cube-face f4"></span><span class="cube-face f5"></span><span class="cube-face f6"></span>
+        </span>
+        <span class="brand-name">StudyBuddy <b>3D</b></span>
+      </div>
+      <h1 id="hero-title" class="tagline">
+        <span>Upload.</span> <span>Understand.</span> <span>Practice.</span> <span>Remember.</span>
+      </h1>
+      <p class="hero-copy">Drop in your PDF notes. Ask questions and get answers with page citations, test yourself with exams, and lock knowledge in with spaced-repetition flashcards.</p>
+      <ul class="chips" aria-label="Features">
+        <li>AI chat with citations</li>
+        <li>5-question exams</li>
+        <li>3D flashcards</li>
+        <li>English · हिन्दी · Hinglish</li>
+      </ul>
+    </section>
+
+    <main id="main" class="login-main" tabindex="-1">
+      <div class="login-card glass" data-tilt>
+        <form id="login-form" novalidate>
+          <h2>Welcome back</h2>
+          <p class="muted">Sign in to open your study space.</p>
+
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-describedby="email-err" required>
+            <p id="email-err" class="field-err" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="pw-wrap">
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" aria-describedby="pw-err" required>
+              <button type="button" id="pw-toggle" class="pw-toggle" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
+            <p id="pw-err" class="field-err" role="alert"></p>
+          </div>
+
+          <button id="login-btn" class="btn3d btn-primary" type="submit"><span class="btn-label">Sign in</span></button>
+          <div class="divider"><span>or</span></div>
+          <button id="guest-btn" class="btn3d btn-ghost" type="button"><span class="btn-label">Continue as guest</span></button>
+
+          <p class="notice"><strong>Demo sign-in only.</strong> There are no accounts and nothing is verified or stored on a server. Do not enter a real password.</p>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="app" hidden>
+    <button id="menu-btn" class="menu-btn btn3d btn-ghost" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar">☰</button>
+    <div id="scrim" class="scrim" hidden></div>
+
+    <aside id="sidebar" class="sidebar glass" aria-label="Primary">
+      <div class="brand small">
+        <span class="cube mini" aria-hidden="true">
+          <span class="cube-face f1"></span><span class="cube-face f2"></span><span class="cube-face f3"></span>
+          <span class="cube-face f4"></span><span class="cube-face f5"></span><span class="cube-face f6"></span>
+        </span>
+        <span class="brand-name">StudyBuddy <b>3D</b></span>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item" data-go="dashboard" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z"/></svg><span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-go="chat" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H8l-4 4z"/></svg><span>Chat with Notes</span>
+        </button>
+        <button class="nav-item" data-go="exam" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h3"/></svg><span>Exam Mode</span>
+        </button>
+        <button class="nav-item" data-go="cards" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4zM3 12l9 4 9-4M3 17l9 4 9-4"/></svg><span>Flashcards</span>
+          <span id="nav-due" class="badge" hidden>0</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <p class="muted small" id="who-line">Signed in as guest</p>
+        <button class="btn3d btn-ghost small-btn" type="button" data-action="signout">Sign out</button>
+      </div>
+    </aside>
+
+    <main id="app-main" class="main" tabindex="-1">
+      <div class="stage">
+
+        <!-- ============ DASHBOARD ============ -->
+        <section id="view-dashboard" class="view" aria-labelledby="dash-title" hidden>
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h1 id="dash-title">Welcome, <span id="welcome-name">there</span></h1>
+              <p id="welcome-sub" class="muted"></p>
+            </div>
+          </header>
+
+          <div id="storage-note" class="banner" hidden></div>
+
+          <div class="grid">
+            <article class="card glass span-2" data-tilt aria-labelledby="up-title">
+              <h2 id="up-title">Upload notes</h2>
+              <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-describedby="drop-hint">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
+                <p><strong>Drag &amp; drop PDF notes here</strong><br>or click to browse</p>
+                <p id="drop-hint" class="muted small">Text-based PDFs, up to 25 MB and 400 pages. Text is extracted in your browser; only relevant excerpts are sent to the AI when you ask a question or generate practice.</p>
+              </div>
+              <input id="file-input" type="file" accept="application/pdf,.pdf" multiple hidden>
+              <div id="upload-status" class="upload-status" role="status" aria-live="polite"></div>
+            </article>
+
+            <article class="card glass" data-tilt aria-labelledby="qa-title">
+              <h2 id="qa-title">Quick actions</h2>
+              <div class="stack">
+                <button class="btn3d btn-primary" type="button" data-go="chat"><span class="btn-label">Chat with Notes</span></button>
+                <button class="btn3d btn-violet" type="button" data-go="exam"><span class="btn-label">Exam Mode</span></button>
+                <button class="btn3d btn-ghost" type="button" data-go="cards"><span class="btn-label">Flashcards</span></button>
+              </div>
+            </article>
+
+            <article class="card glass" data-tilt aria-labelledby="pg-title">
+              <h2 id="pg-title">Study progress</h2>
+              <div class="progress-row">
+                <div class="ring" role="img" id="ring" aria-label="Cards mastered: 0 percent">
+                  <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="ring-grad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/>
+                      </linearGradient>
+                    </defs>
+                    <circle class="ring-bg" cx="60" cy="60" r="52"/>
+                    <circle id="ring-fg" class="ring-fg" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"/>
+                  </svg>
+                  <span id="ring-text" class="ring-text">0%</span>
+                </div>
+                <p id="ring-caption" class="muted small">Cards mastered</p>
+              </div>
+              <dl id="stat-list" class="stats"></dl>
+            </article>
+
+            <article class="card glass" data-tilt aria-labelledby="rc-title">
+              <h2 id="rc-title">Recent documents</h2>
+              <ul id="recent-docs" class="list"></ul>
+            </article>
+
+            <article class="card glass" data-tilt aria-labelledby="wk-title">
+              <h2 id="wk-title">Weak topics</h2>
+              <ul id="weak-list" class="list"></ul>
+            </article>
+
+            <article class="card glass" data-tilt aria-labelledby="rv-title">
+              <h2 id="rv-title">Revision reminders</h2>
+              <ul id="reminder-list" class="list"></ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- ============ CHAT ============ -->
+        <section id="view-chat" class="view" aria-labelledby="chat-title" hidden>
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">AI Study Assistant</p>
+              <h1 id="chat-title">Chat with your notes</h1>
+              <p class="muted">Answers use only text retrieved from your PDF and cite its page numbers.</p>
+            </div>
+            <label class="select-wrap">
+              <span class="sr-only">Document to chat with</span>
+              <select id="chat-doc" class="select"></select>
+            </label>
+          </header>
+
+          <div id="chat-empty" class="empty glass" hidden>
+            <h2>No notes yet</h2>
+            <p class="muted">Upload a PDF on the dashboard to start asking questions.</p>
+            <button class="btn3d btn-primary" type="button" data-go="dashboard"><span class="btn-label">Go to upload</span></button>
+          </div>
+
+          <div id="chat-panel" class="chat glass">
+            <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
+            <form id="chat-form" class="chat-form" novalidate>
+              <label for="chat-input" class="sr-only">Ask a question about your notes</label>
+              <textarea id="chat-input" rows="1" maxlength="1000" placeholder="Ask in English, हिन्दी or Hinglish…"></textarea>
+              <button id="chat-send" class="btn3d btn-primary" type="submit"><span class="btn-label">Send</span></button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ============ EXAM ============ -->
+        <section id="view-exam" class="view" aria-labelledby="exam-title" hidden>
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Exam Mode</p>
+              <h1 id="exam-title">Test yourself</h1>
+              <p class="muted">Five AI-written multiple-choice questions, each grounded in a page of your notes.</p>
+            </div>
+          </header>
+          <div id="exam-root"></div>
+        </section>
+
+        <!-- ============ FLASHCARDS ============ -->
+        <section id="view-cards" class="view" aria-labelledby="cards-title" hidden>
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Flashcards</p>
+              <h1 id="cards-title">Spaced repetition</h1>
+              <p class="muted">Reviews come back after 1, 3 and 7 days as you mark what you know.</p>
+            </div>
+            <div class="head-actions">
+              <label class="select-wrap">
+                <span class="sr-only">Document for flashcards</span>
+                <select id="cards-doc" class="select"></select>
+              </label>
+              <button id="gen-cards-btn" class="btn3d btn-primary" type="button" data-action="gen-cards"><span class="btn-label">Generate cards</span></button>
+            </div>
+          </header>
+
+          <div id="cards-status" class="banner" role="status" aria-live="polite" hidden></div>
+
+          <div class="stat-tiles">
+            <div class="tile glass"><span class="tile-num" id="t-due">0</span><span class="tile-label">Due now</span></div>
+            <div class="tile glass"><span class="tile-num" id="t-upcoming">0</span><span class="tile-label">Upcoming</span></div>
+            <div class="tile glass"><span class="tile-num" id="t-total">0</span><span class="tile-label">Total cards</span></div>
+            <div class="tile glass"><span class="tile-num" id="t-hard">0</span><span class="tile-label">Difficult topics</span></div>
+          </div>
+
+          <div class="cards-layout">
+            <div class="study">
+              <div id="study-empty" class="empty glass" hidden></div>
+
+              <div id="study-stage" hidden>
+                <div class="study-meta">
+                  <span id="study-topic" class="chip"></span>
+                  <span id="study-progress" class="muted small"></span>
+                </div>
+                <div class="flip-scene">
+                  <div id="flip-card" class="flip-card">
+                    <div id="face-front" class="flip-face flip-front">
+                      <span class="face-label">Question</span>
+                      <p id="card-front" class="face-text"></p>
+                      <span id="card-cite-front" class="cite"></span>
+                    </div>
+                    <div id="face-back" class="flip-face flip-back" aria-hidden="true">
+                      <span class="face-label">Answer</span>
+                      <p id="card-back" class="face-text"></p>
+                      <span id="card-cite-back" class="cite"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="rate-row">
+                  <button id="flip-btn" class="btn3d btn-ghost" type="button" data-action="card-flip"><span class="btn-label">Flip card</span></button>
+                </div>
+                <div class="rate-row">
+                  <button id="more-btn" class="btn3d btn-warn" type="button" data-action="card-more" disabled><span class="btn-label">Need more practice</span></button>
+                  <button id="know-btn" class="btn3d btn-good" type="button" data-action="card-know" disabled><span class="btn-label">Know it</span></button>
+                </div>
+                <p class="muted small center">Keyboard: Space flips · → or K = Know it · ← or P = Need more practice</p>
+              </div>
+            </div>
+
+            <aside class="side-lists">
+              <article class="card glass" aria-labelledby="up2-title">
+                <h2 id="up2-title">Upcoming reviews</h2>
+                <ul id="upcoming-list" class="list"></ul>
+              </article>
+              <article class="card glass" aria-labelledby="hard-title">
+                <h2 id="hard-title">Difficult topics</h2>
+                <ul id="hard-list" class="list"></ul>
+              </article>
+            </aside>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>
